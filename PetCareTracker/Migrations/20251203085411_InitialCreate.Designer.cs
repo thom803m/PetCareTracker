@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace PetCareTracker.Migrations
 {
     [DbContext(typeof(PetCareDbContext))]
-    [Migration("20251202144604_InitialCreate")]
+    [Migration("20251203085411_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -33,18 +33,22 @@ namespace PetCareTracker.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Dislikes")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("FoodAmountPerDay")
                         .HasColumnType("integer");
 
                     b.Property<string>("FoodType")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Likes")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Notes")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("PetId")

@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using PetCareTracker.Data;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using PetCareTracker.DTOs;
 using PetCareTracker.Models;
+using PetCareTracker.Repositories.Interfaces;
+using System.Security.Claims;
 
 namespace PetCareTracker.Controllers
 {
@@ -10,135 +11,108 @@ namespace PetCareTracker.Controllers
     [ApiController]
     public class UsersController : ControllerBase
     {
-        private readonly PetCareDbContext _context;
+        private readonly IUserRepository _userRepo;
 
-        public UsersController(PetCareDbContext context)
+        public UsersController(IUserRepository userRepo)
         {
-            _context = context;
+            _userRepo = userRepo;
         }
 
-        // GET: api/Users
-        [HttpGet]
+        [HttpGet] // åbent
         public async Task<ActionResult<IEnumerable<UserDTO>>> GetUsers()
         {
-            var users = await _context.Users
-                .Include(u => u.Pets)
-                .ThenInclude(p => p.CareInstruction)
-                .ToListAsync();
-
-            var userDTOs = users.Select(u => new UserDTO
-            {
-                Id = u.Id,
-                Name = u.Name,
-                Email = u.Email,
-                Pets = u.Pets.Select(p => new PetDTO
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Type = p.Type,
-                    Breed = p.Breed,
-                    ImageUrl = p.ImageUrl,
-                    Age = p.Age,
-                    Notes = p.Notes,
-                    CareInstruction = p.CareInstruction != null ? new CareInstructionDTO
-                    {
-                        FoodAmountPerDay = p.CareInstruction.FoodAmountPerDay,
-                        FoodType = p.CareInstruction.FoodType ?? string.Empty,
-                        Likes = p.CareInstruction.Likes ?? string.Empty,
-                        Dislikes = p.CareInstruction.Dislikes ?? string.Empty,
-                        Notes = p.CareInstruction.Notes ?? string.Empty
-                    } : null
-                }).ToList()
-            }).ToList();
-
-            return Ok(userDTOs);
+            var users = await _userRepo.GetAllAsync();
+            return Ok(users.Select(UserToDTO).ToList());
         }
 
-        // GET: api/Users/5
-        [HttpGet("{id}")]
+        [HttpGet("{id}")] // åbent
         public async Task<ActionResult<UserDTO>> GetUser(int id)
         {
-            var user = await _context.Users
-                .Include(u => u.Pets)
-                .ThenInclude(p => p.CareInstruction)
-                .FirstOrDefaultAsync(u => u.Id == id);
-
+            var user = await _userRepo.GetByIdAsync(id);
             if (user == null) return NotFound();
 
-            var userDTO = new UserDTO
-            {
-                Id = user.Id,
-                Name = user.Name,
-                Email = user.Email,
-                Pets = user.Pets.Select(p => new PetDTO
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    Type = p.Type,
-                    Breed = p.Breed,
-                    ImageUrl = p.ImageUrl,
-                    Age = p.Age,
-                    Notes = p.Notes,
-                    CareInstruction = p.CareInstruction != null ? new CareInstructionDTO
-                    {
-                        FoodAmountPerDay = p.CareInstruction.FoodAmountPerDay,
-                        FoodType = p.CareInstruction.FoodType ?? string.Empty,
-                        Likes = p.CareInstruction.Likes ?? string.Empty,
-                        Dislikes = p.CareInstruction.Dislikes ?? string.Empty,
-                        Notes = p.CareInstruction.Notes ?? string.Empty
-                    } : null
-                }).ToList()
-            };
-
-            return Ok(userDTO);
+            return UserToDTO(user);
         }
 
-        // POST: api/Users
-        [HttpPost]
-        public async Task<ActionResult<UserDTO>> CreateUser(UserDTO userDTO)
+        [HttpPost] // JWT + Admin
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<UserDTO>> CreateUser([FromBody] UserDTO userDTO)
         {
-            var user = new User
-            {
-                Name = userDTO.Name,
-                Email = userDTO.Email
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var user = new User 
+            { 
+                Name = userDTO.Name, 
+                Email = userDTO.Email 
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            await _userRepo.AddAsync(user);
 
             userDTO.Id = user.Id;
-
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, userDTO);
         }
 
-        // PUT: api/Users/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateUser(int id, UserDTO userDTO)
+        [HttpPut("{id}")] // JWT + ejerskab/admin
+        [Authorize]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDTO userDTO)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             if (id != userDTO.Id) return BadRequest();
-
-            var user = await _context.Users.FindAsync(id);
+ 
+            var user = await _userRepo.GetByIdAsync(id);
             if (user == null) return NotFound();
+
+            if (!IsSelfOrAdmin(user.Id)) return Forbid();
 
             user.Name = userDTO.Name;
             user.Email = userDTO.Email;
 
-            await _context.SaveChangesAsync();
-
+            await _userRepo.UpdateAsync(user);
             return NoContent();
         }
 
-        // DELETE: api/Users/5
-        [HttpDelete("{id}")]
+        [HttpDelete("{id}")] // JWT + ejerskab/admin
+        [Authorize]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _userRepo.GetByIdAsync(id);
             if (user == null) return NotFound();
+            if (!IsSelfOrAdmin(id)) return Forbid();
 
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
-
+            await _userRepo.DeleteAsync(user);
             return NoContent();
         }
+
+        private bool IsSelfOrAdmin(int userId)
+        {
+            var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var role = User.FindFirstValue(ClaimTypes.Role);
+            return currentUserId == userId || role == "Admin";
+        }
+
+        private static UserDTO UserToDTO(User u) => new UserDTO
+        {
+            Id = u.Id,
+            Name = u.Name,
+            Email = u.Email,
+            Pets = u.Pets.Select(p => new PetDTO
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Type = p.Type,
+                Breed = p.Breed,
+                ImageUrl = p.ImageUrl,
+                Age = p.Age,
+                Notes = p.Notes,
+                CareInstruction = p.CareInstruction != null ? new CareInstructionDTO
+                {
+                    FoodAmountPerDay = p.CareInstruction.FoodAmountPerDay,
+                    FoodType = p.CareInstruction.FoodType ?? string.Empty,
+                    Likes = p.CareInstruction.Likes ?? string.Empty,
+                    Dislikes = p.CareInstruction.Dislikes ?? string.Empty,
+                    Notes = p.CareInstruction.Notes ?? string.Empty
+                } : null
+            }).ToList()
+        };
     }
 }

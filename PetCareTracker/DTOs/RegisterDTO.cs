@@ -2,10 +2,8 @@
 
 namespace PetCareTracker.DTOs
 {
-    public class UserDTO
+    public class RegisterDTO
     {
-        public int Id { get; set; }
-
         [Required]
         [StringLength(100, MinimumLength = 2)]
         public string Name { get; set; } = string.Empty;
@@ -14,6 +12,10 @@ namespace PetCareTracker.DTOs
         [EmailAddress]
         public string Email { get; set; } = string.Empty;
 
-        public List<PetDTO> Pets { get; set; } = new();
+        [Required]
+        [MinLength(8, ErrorMessage = "Password must be at least 8 characters long.")]
+        public string Password { get; set; } = string.Empty;
+
+        public string? Role { get; set; } = "User";
     }
 }

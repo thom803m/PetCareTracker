@@ -17,19 +17,23 @@ namespace PetCareTracker.Data
             // Seed Users
             if (!_context.Users.Any())
             {
+                string defaultPassword = "Test1234!";
+                string hash = BCrypt.Net.BCrypt.HashPassword(defaultPassword);
+
                 var users = new List<User>
                 {
-                    new User { Id = 1, Name = "Nydia Westover", Email = "nwestover0@paginegialle.it" },
-                    new User { Id = 2, Name = "Maribelle Deguara", Email = "mdeguara1@wisc.edu" },
-                    new User { Id = 3, Name = "Tailor Smickle", Email = "tsmickle2@state.tx.us" },
-                    new User { Id = 4, Name = "Bank Lisciandro", Email = "blisciandro3@cmu.edu" },
-                    new User { Id = 5, Name = "Kylynn Tottman", Email = "ktottman4@stumbleupon.com" },
-                    new User { Id = 6, Name = "Darrel Halkyard", Email = "dhalkyard5@wiley.com" },
-                    new User { Id = 7, Name = "Kain Kinkaid", Email = "kkinkaid6@berkeley.edu" },
-                    new User { Id = 8, Name = "Aeriell MacEllen", Email = "amacellen7@hubpages.com" },
-                    new User { Id = 9, Name = "Jeanette Fattorini", Email = "jfattorini8@blogger.com" },
-                    new User { Id = 10, Name = "Jaine Beatey", Email = "jbeatey9@ebay.co.uk" }
+                    new User { Id = 1, Name = "Nydia Westover", Email = "nwestover0@paginegialle.it", PasswordHash = hash },
+                    new User { Id = 2, Name = "Maribelle Deguara", Email = "mdeguara1@wisc.edu", PasswordHash = hash },
+                    new User { Id = 3, Name = "Tailor Smickle", Email = "tsmickle2@state.tx.us", PasswordHash = hash },
+                    new User { Id = 4, Name = "Bank Lisciandro", Email = "blisciandro3@cmu.edu", PasswordHash = hash },
+                    new User { Id = 5, Name = "Kylynn Tottman", Email = "ktottman4@stumbleupon.com", PasswordHash = hash },
+                    new User { Id = 6, Name = "Darrel Halkyard", Email = "dhalkyard5@wiley.com", PasswordHash = hash },
+                    new User { Id = 7, Name = "Kain Kinkaid", Email = "kkinkaid6@berkeley.edu", PasswordHash = hash },
+                    new User { Id = 8, Name = "Aeriell MacEllen", Email = "amacellen7@hubpages.com", PasswordHash = hash },
+                    new User { Id = 9, Name = "Jeanette Fattorini", Email = "jfattorini8@blogger.com", PasswordHash = hash },
+                    new User { Id = 10, Name = "Jaine Beatey", Email = "jbeatey9@ebay.co.uk", PasswordHash = hash }
                 };
+
                 _context.Users.AddRange(users);
                 _context.SaveChanges();
             }

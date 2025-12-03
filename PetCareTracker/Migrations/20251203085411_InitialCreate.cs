@@ -59,10 +59,10 @@ namespace PetCareTracker.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     PetId = table.Column<int>(type: "integer", nullable: false),
                     FoodAmountPerDay = table.Column<int>(type: "integer", nullable: false),
-                    FoodType = table.Column<string>(type: "text", nullable: true),
-                    Likes = table.Column<string>(type: "text", nullable: true),
-                    Dislikes = table.Column<string>(type: "text", nullable: true),
-                    Notes = table.Column<string>(type: "text", nullable: true)
+                    FoodType = table.Column<string>(type: "text", nullable: false),
+                    Likes = table.Column<string>(type: "text", nullable: false),
+                    Dislikes = table.Column<string>(type: "text", nullable: false),
+                    Notes = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {

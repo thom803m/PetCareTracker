@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using PetCareTracker.Data;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using PetCareTracker.DTOs;
 using PetCareTracker.Models;
+using PetCareTracker.Repositories.Interfaces;
+using System.Security.Claims;
 
 namespace PetCareTracker.Controllers
 {
@@ -10,109 +11,91 @@ namespace PetCareTracker.Controllers
     [ApiController]
     public class CarePeriodsController : ControllerBase
     {
-        private readonly PetCareDbContext _context;
+        private readonly ICarePeriodRepository _cpRepo;
+        private readonly IPetRepository _petRepo;
 
-        public CarePeriodsController(PetCareDbContext context)
+        public CarePeriodsController(ICarePeriodRepository cpRepo, IPetRepository petRepo)
         {
-            _context = context;
+            _cpRepo = cpRepo;
+            _petRepo = petRepo;
         }
 
-        // GET: api/CarePeriods
-        [HttpGet]
+        [HttpGet] // åbent
         public async Task<ActionResult<IEnumerable<CarePeriodDTO>>> GetCarePeriods()
         {
-            var periods = await _context.CarePeriods.ToListAsync();
-
-            var dtoList = periods.Select(cp => new CarePeriodDTO
+            var periods = await _cpRepo.GetAllAsync();
+            return Ok(periods.Select(cp => new CarePeriodDTO
             {
                 Id = cp.Id,
                 PetId = cp.PetId,
-                SitterId = cp.SitterId,
                 StartDate = cp.StartDate,
                 EndDate = cp.EndDate,
-                Status = cp.Status ?? string.Empty
-            }).ToList();
-
-            return Ok(dtoList);
-        }
-
-        // GET: api/CarePeriods/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<CarePeriodDTO>> GetCarePeriod(int id)
-        {
-            var cp = await _context.CarePeriods.FindAsync(id);
-
-            if (cp == null)
-                return NotFound();
-
-            var dto = new CarePeriodDTO
-            {
-                Id = cp.Id,
-                PetId = cp.PetId,
                 SitterId = cp.SitterId,
-                StartDate = cp.StartDate,
-                EndDate = cp.EndDate,
-                Status = cp.Status ?? string.Empty
-            };
-
-            return Ok(dto);
+                SitterName = cp.Sitter?.Name,
+                Status = cp.Status
+            }).ToList());
         }
 
-        // POST: api/CarePeriods
-        [HttpPost]
-        public async Task<ActionResult<CarePeriodDTO>> CreateCarePeriod(CarePeriodDTO dto)
+        [HttpPost] // JWT + ejerskab/admin
+        [Authorize]
+        public async Task<ActionResult<CarePeriodDTO>> CreateCarePeriod([FromBody] CarePeriodDTO petDto)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var pet = await _petRepo.GetByIdAsync(petDto.PetId);
+            if (pet == null) return BadRequest("Pet not found.");
+            if (!IsOwnerOrAdmin(pet.OwnerId)) return Forbid();
+
             var cp = new CarePeriod
             {
-                PetId = dto.PetId,
-                SitterId = dto.SitterId,
-                StartDate = dto.StartDate,
-                EndDate = dto.EndDate,
-                Status = dto.Status
+                PetId = petDto.PetId,
+                StartDate = petDto.StartDate,
+                EndDate = petDto.EndDate,
+                SitterId = petDto.SitterId,
+                Status = petDto.Status
             };
 
-            _context.CarePeriods.Add(cp);
-            await _context.SaveChangesAsync();
-
-            dto.Id = cp.Id;
-
-            return CreatedAtAction(nameof(GetCarePeriod), new { id = dto.Id }, dto);
+            await _cpRepo.AddAsync(cp);
+            petDto.Id = cp.Id;
+            return CreatedAtAction(nameof(GetCarePeriods), new { id = cp.Id }, petDto);
         }
 
-        // PUT: api/CarePeriods/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCarePeriod(int id, CarePeriodDTO dto)
+        [HttpPut("{id}")] // JWT + ejerskab/admin
+        [Authorize]
+        public async Task<IActionResult> UpdateCarePeriod(int id, [FromBody] CarePeriodDTO petDto)
         {
-            if (id != dto.Id)
-                return BadRequest();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var cp = await _context.CarePeriods.FindAsync(id);
-            if (cp == null)
-                return NotFound();
+            var cp = await _cpRepo.GetByIdAsync(id);
+            if (cp == null) return NotFound();
+            if (!IsOwnerOrAdmin(cp.Pet.OwnerId)) return Forbid();
 
-            cp.PetId = dto.PetId;
-            cp.SitterId = dto.SitterId;
-            cp.StartDate = dto.StartDate;
-            cp.EndDate = dto.EndDate;
-            cp.Status = dto.Status;
+            cp.StartDate = petDto.StartDate;
+            cp.EndDate = petDto.EndDate;
+            cp.SitterId = petDto.SitterId;
+            cp.Status = petDto.Status;
 
-            await _context.SaveChangesAsync();
-
+            await _cpRepo.UpdateAsync(cp);
             return NoContent();
         }
 
-        // DELETE: api/CarePeriods/5
-        [HttpDelete("{id}")]
+        [HttpDelete("{id}")] // JWT + ejerskab/admin
+        [Authorize]
         public async Task<IActionResult> DeleteCarePeriod(int id)
         {
-            var cp = await _context.CarePeriods.FindAsync(id);
-            if (cp == null)
-                return NotFound();
+            var cp = await _cpRepo.GetByIdAsync(id);
+            if (cp == null) return NotFound();
+            if (!IsOwnerOrAdmin(cp.Pet.OwnerId)) return Forbid();
 
-            _context.CarePeriods.Remove(cp);
-            await _context.SaveChangesAsync();
-
+            await _cpRepo.DeleteAsync(cp);
             return NoContent();
+        }
+
+        private bool IsOwnerOrAdmin(int ownerId)
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var role = User.FindFirstValue(ClaimTypes.Role);
+            return userId == ownerId || role == "Admin";
         }
     }
 }
