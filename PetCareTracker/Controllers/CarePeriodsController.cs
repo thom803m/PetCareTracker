@@ -1,9 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using PetCareTracker.DTOs;
 using PetCareTracker.Models;
 using PetCareTracker.Repositories.Interfaces;
-using System.Security.Claims;
 
 namespace PetCareTracker.Controllers
 {
@@ -12,90 +10,68 @@ namespace PetCareTracker.Controllers
     public class CarePeriodsController : ControllerBase
     {
         private readonly ICarePeriodRepository _cpRepo;
-        private readonly IPetRepository _petRepo;
 
-        public CarePeriodsController(ICarePeriodRepository cpRepo, IPetRepository petRepo)
+        public CarePeriodsController(ICarePeriodRepository cpRepo)
         {
             _cpRepo = cpRepo;
-            _petRepo = petRepo;
         }
 
-        [HttpGet] // åbent
-        public async Task<ActionResult<IEnumerable<CarePeriodDTO>>> GetCarePeriods()
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<CarePeriodDTO>>> GetAll()
         {
             var periods = await _cpRepo.GetAllAsync();
-            return Ok(periods.Select(cp => new CarePeriodDTO
+            return Ok(periods.Select(p => new CarePeriodDTO
             {
-                Id = cp.Id,
-                PetId = cp.PetId,
-                StartDate = cp.StartDate,
-                EndDate = cp.EndDate,
-                SitterId = cp.SitterId,
-                SitterName = cp.Sitter?.Name,
-                Status = cp.Status
-            }).ToList());
+                Id = p.Id,
+                PetId = p.PetId,
+                StartDate = p.StartDate,
+                EndDate = p.EndDate,
+                SitterId = p.SitterId,
+                Status = p.Status
+            }));
         }
 
-        [HttpPost] // JWT + ejerskab/admin
-        [Authorize]
-        public async Task<ActionResult<CarePeriodDTO>> CreateCarePeriod([FromBody] CarePeriodDTO petDto)
+        [HttpPost]
+        public async Task<ActionResult<CarePeriodDTO>> Create([FromBody] CarePeriodDTO dto)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-
-            var pet = await _petRepo.GetByIdAsync(petDto.PetId);
-            if (pet == null) return BadRequest("Pet not found.");
-            if (!IsOwnerOrAdmin(pet.OwnerId)) return Forbid();
-
             var cp = new CarePeriod
             {
-                PetId = petDto.PetId,
-                StartDate = petDto.StartDate,
-                EndDate = petDto.EndDate,
-                SitterId = petDto.SitterId,
-                Status = petDto.Status
+                PetId = dto.PetId,
+                StartDate = dto.StartDate,
+                EndDate = dto.EndDate,
+                SitterId = dto.SitterId,
+                Status = dto.Status
             };
-
             await _cpRepo.AddAsync(cp);
-            petDto.Id = cp.Id;
-            return CreatedAtAction(nameof(GetCarePeriods), new { id = cp.Id }, petDto);
+            dto.Id = cp.Id;
+
+            return CreatedAtAction(nameof(GetAll), new { id = cp.Id }, dto);
         }
 
-        [HttpPut("{id}")] // JWT + ejerskab/admin
-        [Authorize]
-        public async Task<IActionResult> UpdateCarePeriod(int id, [FromBody] CarePeriodDTO petDto)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] CarePeriodDTO dto)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-
             var cp = await _cpRepo.GetByIdAsync(id);
-            if (cp == null) return NotFound();
-            if (!IsOwnerOrAdmin(cp.Pet.OwnerId)) return Forbid();
+            if (cp == null) return NotFound("Care period not found");
 
-            cp.StartDate = petDto.StartDate;
-            cp.EndDate = petDto.EndDate;
-            cp.SitterId = petDto.SitterId;
-            cp.Status = petDto.Status;
+            cp.PetId = dto.PetId;
+            cp.StartDate = dto.StartDate;
+            cp.EndDate = dto.EndDate;
+            cp.SitterId = dto.SitterId;
+            cp.Status = dto.Status;
 
             await _cpRepo.UpdateAsync(cp);
-            return NoContent();
+            return Ok(dto);
         }
 
-        [HttpDelete("{id}")] // JWT + ejerskab/admin
-        [Authorize]
-        public async Task<IActionResult> DeleteCarePeriod(int id)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
         {
             var cp = await _cpRepo.GetByIdAsync(id);
-            if (cp == null) return NotFound();
-            if (!IsOwnerOrAdmin(cp.Pet.OwnerId)) return Forbid();
+            if (cp == null) return NotFound("Care period not found");
 
             await _cpRepo.DeleteAsync(cp);
             return NoContent();
-        }
-
-        private bool IsOwnerOrAdmin(int ownerId)
-        {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var role = User.FindFirstValue(ClaimTypes.Role);
-            return userId == ownerId || role == "Admin";
         }
     }
 }

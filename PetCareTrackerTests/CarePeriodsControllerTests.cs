@@ -26,6 +26,29 @@ namespace PetCareTracker.Tests
         }
 
         [Fact]
+        public async Task GetCarePeriods_ReturnsOkWithList()
+        {
+            // Arrange
+            var periods = new List<CarePeriod>
+            {
+                new CarePeriod { Id = 1, PetId = 1, Status = "Active", StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(1) }
+            };
+            _mockRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(periods);
+
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            // Act
+            var result = await _controller.GetCarePeriods();
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result.Result);
+            var list = Assert.IsType<List<CarePeriodDTO>>(okResult.Value);
+            Assert.Single(list);
+            Assert.Equal(1, list[0].PetId);
+        }
+
+
+        [Fact]
         public async Task CreateCarePeriod_NotOwner_ReturnsForbid()
         {
             _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
@@ -49,6 +72,47 @@ namespace PetCareTracker.Tests
             var created = Assert.IsType<CreatedAtActionResult>(result.Result);
             var returnedDto = Assert.IsType<CarePeriodDTO>(created.Value);
             Assert.Equal(1, returnedDto.PetId);
+        }
+
+        [Fact]
+        public async Task UpdateCarePeriod_AsOwner_ReturnsNoContent()
+        {
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            var carePeriod = new CarePeriod
+            {
+                Id = 1,
+                PetId = 1,
+                Pet = new Pet { Id = 1, OwnerId = 1 } // vigtig for ejerskabstjek
+            };
+
+            _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(carePeriod);
+            _mockRepo.Setup(r => r.UpdateAsync(It.IsAny<CarePeriod>())).Returns(Task.CompletedTask);
+
+            var dto = new CarePeriodDTO { Id = 1, PetId = 1, StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(2) };
+            var result = await _controller.UpdateCarePeriod(1, dto);
+
+            Assert.IsType<NoContentResult>(result);
+        }
+
+        [Fact]
+        public async Task DeleteCarePeriod_AsOwner_ReturnsNoContent()
+        {
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            var carePeriod = new CarePeriod
+            {
+                Id = 1,
+                PetId = 1,
+                Pet = new Pet { Id = 1, OwnerId = 1 } // vigtig for ejerskabstjek
+            };
+
+            _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(carePeriod);
+            _mockRepo.Setup(r => r.DeleteAsync(It.IsAny<CarePeriod>())).Returns(Task.CompletedTask);
+
+            var result = await _controller.DeleteCarePeriod(1);
+
+            Assert.IsType<NoContentResult>(result);
         }
     }
 }

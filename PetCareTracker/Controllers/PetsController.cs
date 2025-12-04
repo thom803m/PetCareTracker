@@ -1,9 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using PetCareTracker.DTOs;
 using PetCareTracker.Models;
 using PetCareTracker.Repositories.Interfaces;
-using System.Security.Claims;
 
 namespace PetCareTracker.Controllers
 {
@@ -18,136 +16,68 @@ namespace PetCareTracker.Controllers
             _petRepo = petRepo;
         }
 
-        [HttpGet] // åbent
+        [HttpGet]
         public async Task<ActionResult<IEnumerable<PetDTO>>> GetPets()
         {
             var pets = await _petRepo.GetAllAsync();
-            return Ok(pets.Select(PetToDTO).ToList());
+            return Ok(pets.Select(p => new PetDTO
+            {
+                Id = p.Id,
+                OwnerId = p.OwnerId,
+                Name = p.Name,
+                Type = p.Type,
+                Breed = p.Breed,
+                ImageUrl = p.ImageUrl,
+                Age = p.Age,
+                Notes = p.Notes
+            }));
         }
 
-        [HttpGet("{id}")] // åbent
-        public async Task<ActionResult<PetDTO>> GetPet(int id)
+        [HttpPost]
+        public async Task<ActionResult<PetDTO>> CreatePet([FromBody] PetDTO dto)
         {
-            var pet = await _petRepo.GetByIdAsync(id);
-            if (pet == null) return NotFound();
-            return PetToDTO(pet);
-        }
-
-        [HttpPost] // JWT + ejerskab/admin
-        [Authorize]
-        public async Task<ActionResult<PetDTO>> CreatePet([FromBody] PetDTO petDto)
-        {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            if (!IsOwnerOrAdmin(petDto.OwnerId)) return Forbid();
-
             var pet = new Pet
             {
-                OwnerId = petDto.OwnerId,
-                Name = petDto.Name,
-                Type = petDto.Type,
-                Breed = petDto.Breed,
-                ImageUrl = petDto.ImageUrl,
-                Age = petDto.Age,
-                Notes = petDto.Notes
+                OwnerId = dto.OwnerId,
+                Name = dto.Name,
+                Type = dto.Type,
+                Breed = dto.Breed,
+                ImageUrl = dto.ImageUrl,
+                Age = dto.Age,
+                Notes = dto.Notes
             };
-
-            if (petDto.CareInstruction != null)
-            {
-                pet.CareInstruction = new CareInstruction
-                {
-                    FoodAmountPerDay = petDto.CareInstruction.FoodAmountPerDay,
-                    FoodType = petDto.CareInstruction.FoodType,
-                    Likes = petDto.CareInstruction.Likes,
-                    Dislikes = petDto.CareInstruction.Dislikes,
-                    Notes = petDto.CareInstruction.Notes
-                };
-            }
-
             await _petRepo.AddAsync(pet);
-            return CreatedAtAction(nameof(GetPet), new { id = pet.Id }, PetToDTO(pet));
+            dto.Id = pet.Id;
+
+            return CreatedAtAction(nameof(GetPets), new { id = pet.Id }, dto);
         }
 
-        [HttpPut("{id}")] // JWT + ejerskab/admin
-        [Authorize]
-        public async Task<IActionResult> UpdatePet(int id, [FromBody] PetDTO petDto)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdatePet(int id, [FromBody] PetDTO dto)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-
             var pet = await _petRepo.GetByIdAsync(id);
-            if (pet == null) return NotFound();
-            if (!IsOwnerOrAdmin(pet.OwnerId)) return Forbid();
+            if (pet == null) return NotFound("Pet not found");
 
-            pet.Name = petDto.Name;
-            pet.Type = petDto.Type;
-            pet.Breed = petDto.Breed;
-            pet.ImageUrl = petDto.ImageUrl;
-            pet.Age = petDto.Age;
-            pet.Notes = petDto.Notes;
-
-            if (petDto.CareInstruction != null)
-            {
-                pet.CareInstruction ??= new CareInstruction();
-                pet.CareInstruction.FoodAmountPerDay = petDto.CareInstruction.FoodAmountPerDay;
-                pet.CareInstruction.FoodType = petDto.CareInstruction.FoodType;
-                pet.CareInstruction.Likes = petDto.CareInstruction.Likes;
-                pet.CareInstruction.Dislikes = petDto.CareInstruction.Dislikes;
-                pet.CareInstruction.Notes = petDto.CareInstruction.Notes;
-            }
+            pet.Name = dto.Name;
+            pet.Type = dto.Type;
+            pet.Breed = dto.Breed;
+            pet.ImageUrl = dto.ImageUrl;
+            pet.Age = dto.Age;
+            pet.Notes = dto.Notes;
+            pet.OwnerId = dto.OwnerId;
 
             await _petRepo.UpdateAsync(pet);
-            return NoContent();
+            return Ok(dto);
         }
 
-        [HttpDelete("{id}")] // JWT + ejerskab/admin
-        [Authorize]
+        [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePet(int id)
         {
             var pet = await _petRepo.GetByIdAsync(id);
-            if (pet == null) return NotFound();
-            if (!IsOwnerOrAdmin(pet.OwnerId)) return Forbid();
+            if (pet == null) return NotFound("Pet not found");
 
             await _petRepo.DeleteAsync(pet);
             return NoContent();
         }
-
-        private bool IsOwnerOrAdmin(int ownerId)
-        {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var role = User.FindFirstValue(ClaimTypes.Role);
-            return userId == ownerId || role == "Admin";
-        }
-
-        private static PetDTO PetToDTO(Pet pet) => new PetDTO
-        {
-            Id = pet.Id,
-            OwnerId = pet.OwnerId,
-            OwnerName = pet.Owner?.Name,
-            Name = pet.Name,
-            Type = pet.Type,
-            Breed = pet.Breed,
-            ImageUrl = pet.ImageUrl,
-            Age = pet.Age,
-            Notes = pet.Notes,
-            CareInstruction = pet.CareInstruction != null ? new CareInstructionDTO
-            {
-                Id = pet.CareInstruction.Id,
-                PetId = pet.CareInstruction.PetId,
-                FoodAmountPerDay = pet.CareInstruction.FoodAmountPerDay,
-                FoodType = pet.CareInstruction.FoodType,
-                Likes = pet.CareInstruction.Likes,
-                Dislikes = pet.CareInstruction.Dislikes,
-                Notes = pet.CareInstruction.Notes
-            } : null,
-            CarePeriods = pet.CarePeriods?.Select(cp => new CarePeriodDTO
-            {
-                Id = cp.Id,
-                PetId = cp.PetId,
-                StartDate = cp.StartDate,
-                EndDate = cp.EndDate,
-                SitterId = cp.SitterId,
-                SitterName = cp.Sitter?.Name,
-                Status = cp.Status
-            }).ToList() ?? new List<CarePeriodDTO>()
-        };
     }
 }

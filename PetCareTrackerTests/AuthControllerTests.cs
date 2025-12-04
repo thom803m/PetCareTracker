@@ -27,7 +27,7 @@ namespace PetCareTracker.Tests
 
             // Konfig mock til JWT
             var inMemorySettings = new Dictionary<string, string> {
-                {"Jwt:Key", "SuperSecretKey1234567"},
+                {"Jwt:Key", "SuperSecretKey12345678901234567890"},
                 {"Jwt:Issuer", "TestIssuer"},
                 {"Jwt:Audience", "TestAudience"},
                 {"Jwt:DurationMinutes", "60"}
@@ -77,6 +77,17 @@ namespace PetCareTracker.Tests
         }
 
         [Fact]
+        public async Task RegisterUser_ReturnsOk()
+        {
+            var dto = new RegisterDTO { Name = "Bob", Email = "bob@test.com", Password = "password" };
+            var result = await _controller.Register(dto);
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            dynamic value = okResult.Value!;
+            Assert.Equal("Bob", value.Name);
+        }
+
+
+        [Fact]
         public async Task Login_ShouldReturnToken_WhenValidCredentials()
         {
             // Arrange: opret bruger
@@ -91,8 +102,9 @@ namespace PetCareTracker.Tests
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(result);
-            var tokenObj = okResult.Value as dynamic;
-            Assert.False(string.IsNullOrEmpty(tokenObj.token));
+            var tokenDict = Assert.IsType<Dictionary<string, string>>(okResult.Value);
+            Assert.True(tokenDict.ContainsKey("token"));
+            Assert.False(string.IsNullOrEmpty(tokenDict["token"]));
         }
 
         [Fact]
@@ -107,6 +119,26 @@ namespace PetCareTracker.Tests
             // Assert
             var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
             Assert.Equal("Invalid credentials.", unauthorized.Value);
+        }
+
+        [Fact]
+        public async Task LoginUser_ReturnsToken()
+        {
+            // Arrange
+            var user = new User { Name = "Bob", Email = "bob@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("password"), Role = "User" };
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var dto = new LoginDTO { Email = "bob@test.com", Password = "password" };
+
+            // Act
+            var result = await _controller.Login(dto);
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var tokenDict = Assert.IsType<Dictionary<string, string>>(okResult.Value);
+            Assert.True(tokenDict.ContainsKey("token"));
+            Assert.False(string.IsNullOrEmpty(tokenDict["token"]));
         }
     }
 }

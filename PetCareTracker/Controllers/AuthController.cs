@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using PetCareTracker.Data;
 using PetCareTracker.DTOs;
 using PetCareTracker.Models;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -32,7 +33,8 @@ namespace PetCareTracker.Controllers
                 return BadRequest(ModelState);
 
             var existing = await _context.Users.AnyAsync(u => u.Email == dto.Email);
-            if (existing) return BadRequest("Email already in use.");
+            if (existing)
+                return BadRequest("Email already in use.");
 
             var user = new User
             {
@@ -45,7 +47,14 @@ namespace PetCareTracker.Controllers
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return Ok(new { user.Id, user.Name, user.Email });
+            var userDTO = new UserDTO
+            {
+                Id = user.Id,
+                Name = user.Name,
+                Email = user.Email
+            };
+
+            return Ok(userDTO);
         }
 
         // POST: api/Auth/login
@@ -60,7 +69,7 @@ namespace PetCareTracker.Controllers
                 return Unauthorized("Invalid credentials.");
 
             var token = GenerateJwtToken(user);
-            return Ok(new { token });
+            return Ok(new Dictionary<string, string> { { "token", token } });
         }
 
         private string GenerateJwtToken(User user)

@@ -4,26 +4,50 @@ using Microsoft.IdentityModel.Tokens;
 using PetCareTracker.Data;
 using PetCareTracker.Repositories;
 using PetCareTracker.Repositories.Interfaces;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// ---------------------------
+// Services
+// ---------------------------
+
+// DbContext
 builder.Services.AddDbContext<PetCareDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Controllers
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
 
-var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
+// Swagger / OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<PetCareDbContext>();
-    var seeder = new Seeder(dbContext);
-    seeder.Seed();
-}
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "PetCareTracker API",
+        Version = "v1"
+    });
 
+    // JWT support i Swagger
+    var securityScheme = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Indtast JWT token: Bearer {token}"
+    };
+    c.AddSecurityDefinition("Bearer", securityScheme);
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        { securityScheme, Array.Empty<string>() }
+    });
+});
+
+// JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
 
@@ -34,10 +58,11 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // true i prod
+    options.RequireHttpsMetadata = false; // true i produktion
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
+        RoleClaimType = ClaimTypes.Role,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ValidateIssuer = true,
@@ -49,19 +74,39 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPetRepository, PetRepository>();
 builder.Services.AddScoped<ICareInstructionRepository, CareInstructionRepository>();
 builder.Services.AddScoped<ICarePeriodRepository, CarePeriodRepository>();
 
-// Add authorization if you want role-based policies later
+// Authorization (role-baseret)
 builder.Services.AddAuthorization();
 
+// ---------------------------
+// Build app
+// ---------------------------
+var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Seed database
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<PetCareDbContext>();
+    var seeder = new Seeder(dbContext);
+    seeder.Seed();
+}
+
+// ---------------------------
+// Middleware
+// ---------------------------
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PetCareTracker API V1");
+        c.RoutePrefix = string.Empty; // Swagger UI på root (/)
+    });
 }
 
 app.UseHttpsRedirection();

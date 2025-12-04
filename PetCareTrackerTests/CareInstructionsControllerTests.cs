@@ -26,6 +26,57 @@ namespace PetCareTracker.Tests
         }
 
         [Fact]
+        public async Task GetCareInstructions_ReturnsOkWithList()
+        {
+            // Arrange
+            var instructions = new List<CareInstruction>
+            {
+                new CareInstruction { Id = 1, PetId = 1, FoodAmountPerDay = 5, FoodType = "Dry Food", Likes = "Playing", Dislikes = "Loud Noise", Notes = "None" }
+            };
+            _mockRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(instructions);
+
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            // Act
+            var result = await _controller.GetCareInstructions();
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result.Result);
+            var list = Assert.IsType<List<CareInstructionDTO>>(okResult.Value);
+            Assert.Single(list);
+            Assert.Equal(5, list[0].FoodAmountPerDay);
+        }
+
+        [Fact]
+        public async Task GetCareInstruction_ReturnsOk_WhenExists()
+        {
+            // Arrange
+            var instruction = new CareInstruction
+            {
+                Id = 1,
+                PetId = 1,
+                FoodAmountPerDay = 5,
+                FoodType = "Dry Food",
+                Likes = "Playing",
+                Dislikes = "Loud Noise",
+                Notes = "None"
+            };
+            _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(instruction);
+            _mockPetRepo.Setup(r => r.GetByIdAsync(1))
+                        .ReturnsAsync(new Pet { Id = 1, OwnerId = 1 }); // tjek ejerskab
+
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            // Act
+            var result = await _controller.GetCareInstruction(1);
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result.Result);
+            var dto = Assert.IsType<CareInstructionDTO>(okResult.Value);
+            Assert.Equal(5, dto.FoodAmountPerDay);
+        }
+
+        [Fact]
         public async Task CreateCareInstruction_NotOwner_ReturnsForbid()
         {
             _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
@@ -52,6 +103,48 @@ namespace PetCareTracker.Tests
             var returnedDto = Assert.IsType<CareInstructionDTO>(created.Value);
             Assert.Equal(10, returnedDto.FoodAmountPerDay);
             Assert.Equal(1, returnedDto.PetId);
+        }
+
+        [Fact]
+        public async Task UpdateCareInstruction_AsOwner_ReturnsNoContent()
+        {
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            var careInstruction = new CareInstruction
+            {
+                Id = 1,
+                PetId = 1,
+                FoodAmountPerDay = 5,
+                Pet = new Pet { Id = 1, OwnerId = 1 } // vigtig for ejerskabstjek
+            };
+
+            _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(careInstruction);
+            _mockRepo.Setup(r => r.UpdateAsync(It.IsAny<CareInstruction>())).Returns(Task.CompletedTask);
+
+            var dto = new CareInstructionDTO { Id = 1, PetId = 1, FoodAmountPerDay = 15 };
+            var result = await _controller.UpdateCareInstruction(1, dto);
+
+            Assert.IsType<NoContentResult>(result);
+        }
+
+        [Fact]
+        public async Task DeleteCareInstruction_AsOwner_ReturnsNoContent()
+        {
+            _controller.ControllerContext.HttpContext.User = TestHelpers.CreateTestUser(1, "User");
+
+            var careInstruction = new CareInstruction
+            {
+                Id = 1,
+                PetId = 1,
+                Pet = new Pet { Id = 1, OwnerId = 1 } // vigtig for ejerskabstjek
+            };
+
+            _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(careInstruction);
+            _mockRepo.Setup(r => r.DeleteAsync(It.IsAny<CareInstruction>())).Returns(Task.CompletedTask);
+
+            var result = await _controller.DeleteCareInstruction(1);
+
+            Assert.IsType<NoContentResult>(result);
         }
     }
 }
